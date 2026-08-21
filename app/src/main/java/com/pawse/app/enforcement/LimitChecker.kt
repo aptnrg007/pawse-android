@@ -1,19 +1,27 @@
 package com.pawse.app.enforcement
 
+import com.pawse.app.data.AppLimit
+
 /**
- * Hardcoded for Phase 2's proof-of-concept: one package, a short limit so it can
- * actually be tested repeatedly. Real per-app config (Room-backed) is Phase 3.
+ * Holds the latest snapshot of enabled limits, kept current by whoever owns this
+ * instance collecting Room's observeAll() Flow and calling [updateLimits] on each
+ * emission. Reads are synchronous and lock-free (a plain volatile field) because
+ * [Enforcer] calls this from a tight poll loop — no DB access on that path.
  */
-object LimitChecker {
+class LimitChecker {
 
-    private val HARDCODED_LIMITS_MILLIS = mapOf(
-        "com.instagram.android" to 2 * 60 * 1000L,
-    )
+    @Volatile
+    private var limitsByPackage: Map<String, AppLimit> = emptyMap()
 
-    fun limitMillisFor(packageName: String): Long? = HARDCODED_LIMITS_MILLIS[packageName]
+    fun updateLimits(limits: List<AppLimit>) {
+        limitsByPackage = limits.filter { it.enabled }.associateBy { it.packageName }
+    }
+
+    fun limitMillisFor(packageName: String): Long? =
+        limitsByPackage[packageName]?.dailyLimitMinutes?.times(60_000L)
 
     fun isOverLimit(packageName: String, usedMillis: Long): Boolean {
-        val limit = limitMillisFor(packageName) ?: return false
-        return usedMillis >= limit
+        val limitMillis = limitMillisFor(packageName) ?: return false
+        return usedMillis >= limitMillis
     }
 }

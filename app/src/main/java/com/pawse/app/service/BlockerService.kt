@@ -15,19 +15,26 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.pawse.app.MainActivity
 import com.pawse.app.R
+import com.pawse.app.data.PawseDatabase
 import com.pawse.app.detector.ForegroundDetector
 import com.pawse.app.detector.UsageStatsRepository
 import com.pawse.app.enforcement.Enforcer
+import com.pawse.app.enforcement.LimitChecker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Foreground service (type specialUse — see manifest) that keeps [ForegroundDetector]
- * polling while the screen is on, and — from Phase 2 — runs [Enforcer] against the
- * currently foreground package on every tick.
+ * polling while the screen is on, and runs [Enforcer] against the currently foreground
+ * package on every tick using limits read from Room via [LimitChecker].
  *
- * Only ever started from an already-foreground context (MainActivity) or, from
- * Phase 3 onward, BOOT_COMPLETED — both are exempt from Android 15's restriction on
- * starting a foreground service from the background. Never start this from a plain
- * background broadcast or alarm.
+ * Started from an already-foreground context (MainActivity) or from BOOT_COMPLETED
+ * ([BootReceiver]) — both are exempt from Android 15's restriction on starting a
+ * foreground service from the background. Never start this from a plain background
+ * broadcast or alarm.
  */
 class BlockerService : Service() {
 
@@ -43,6 +50,7 @@ class BlockerService : Service() {
     private lateinit var screenStateReceiver: ScreenStateReceiver
     private val handler = Handler(Looper.getMainLooper())
     private var isScreenOn = true
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -58,7 +66,14 @@ class BlockerService : Service() {
         super.onCreate()
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         foregroundDetector = ForegroundDetector(usageStatsManager)
-        enforcer = Enforcer(applicationContext, UsageStatsRepository(usageStatsManager))
+
+        val limitChecker = LimitChecker()
+        enforcer = Enforcer(applicationContext, UsageStatsRepository(usageStatsManager), limitChecker)
+
+        val dao = PawseDatabase.getInstance(applicationContext).appLimitDao()
+        serviceScope.launch {
+            dao.observeAll().collect { limitChecker.updateLimits(it) }
+        }
 
         screenStateReceiver = ScreenStateReceiver(
             onScreenOn = { isScreenOn = true },
@@ -88,6 +103,7 @@ class BlockerService : Service() {
     override fun onDestroy() {
         handler.removeCallbacks(pollRunnable)
         unregisterReceiver(screenStateReceiver)
+        serviceScope.cancel()
         super.onDestroy()
     }
 

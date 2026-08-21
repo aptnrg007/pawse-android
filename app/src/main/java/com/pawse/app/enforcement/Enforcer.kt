@@ -19,6 +19,7 @@ import com.pawse.app.detector.UsageStatsRepository
 class Enforcer(
     private val context: Context,
     private val usageStatsRepository: UsageStatsRepository,
+    private val limitChecker: LimitChecker,
 ) {
     companion object {
         private const val COOLDOWN_MILLIS = 5_000L
@@ -30,12 +31,12 @@ class Enforcer(
         if (foregroundPackage == null) return
         if (Blocklist.isProtected(context, foregroundPackage)) return
 
-        LimitChecker.limitMillisFor(foregroundPackage) ?: return
+        limitChecker.limitMillisFor(foregroundPackage) ?: return
         val lastBlocked = lastBlockedAtMillis[foregroundPackage] ?: 0L
         if (now - lastBlocked < COOLDOWN_MILLIS) return
 
         val usedMillis = usageStatsRepository.todayUsageMillis(foregroundPackage, now)
-        if (!LimitChecker.isOverLimit(foregroundPackage, usedMillis)) return
+        if (!limitChecker.isOverLimit(foregroundPackage, usedMillis)) return
 
         lastBlockedAtMillis[foregroundPackage] = now
         launchBlockActivity()

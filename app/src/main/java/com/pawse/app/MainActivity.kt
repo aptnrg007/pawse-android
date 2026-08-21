@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,13 +38,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.pawse.app.data.AppLimit
+import com.pawse.app.data.PawseDatabase
 import com.pawse.app.detector.UsageStatsRepository
 import com.pawse.app.permissions.PermissionState
+import com.pawse.app.picker.InstalledAppsRepository
+import com.pawse.app.picker.LaunchableApp
 import com.pawse.app.service.BlockerService
+import com.pawse.app.ui.AppLimitsScreen
+import com.pawse.app.ui.AppPickerScreen
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-private const val DEBUG_PACKAGE = "com.instagram.android"
-private const val DEBUG_REFRESH_INTERVAL_MS = 3_000L
+private const val DEFAULT_LIMIT_MINUTES = 30
+private const val USAGE_REFRESH_INTERVAL_MS = 5_000L
+
+private sealed interface Screen {
+    data object Home : Screen
+    data object Picker : Screen
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -59,22 +72,90 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val dao = PawseDatabase.getInstance(applicationContext).appLimitDao()
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    PermissionScreen(
-                        usageAccessGranted = usageAccessGranted.value,
-                        notificationsGranted = notificationsGranted.value,
-                        overlayGranted = overlayGranted.value,
-                        batteryIgnored = batteryIgnored.value,
-                        onOpenAppInfo = ::openAppInfo,
-                        onGrantUsageAccess = { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
-                        onGrantNotifications = ::requestNotificationPermission,
-                        onGrantOverlay = ::openOverlaySettings,
-                        onGrantBattery = ::openBatterySettings,
-                        onStartService = ::startBlockerService,
-                        onStopService = ::stopBlockerService,
-                    )
+                    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+                    val coroutineScope = rememberCoroutineScope()
+
+                    var appLimits by remember { mutableStateOf<List<AppLimit>>(emptyList()) }
+                    LaunchedEffect(Unit) {
+                        dao.observeAll().collect { appLimits = it }
+                    }
+
+                    var usageMillisByPackage by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+                    LaunchedEffect(appLimits) {
+                        val usageStatsManager =
+                            getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                        val repository = UsageStatsRepository(usageStatsManager)
+                        while (true) {
+                            usageMillisByPackage = appLimits.associate {
+                                it.packageName to repository.todayUsageMillis(it.packageName)
+                            }
+                            delay(USAGE_REFRESH_INTERVAL_MS)
+                        }
+                    }
+
+                    when (val current = screen) {
+                        Screen.Home -> HomeScreen(
+                            usageAccessGranted = usageAccessGranted.value,
+                            notificationsGranted = notificationsGranted.value,
+                            overlayGranted = overlayGranted.value,
+                            batteryIgnored = batteryIgnored.value,
+                            onOpenAppInfo = ::openAppInfo,
+                            onGrantUsageAccess = { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) },
+                            onGrantNotifications = ::requestNotificationPermission,
+                            onGrantOverlay = ::openOverlaySettings,
+                            onGrantBattery = ::openBatterySettings,
+                            onStartService = ::startBlockerService,
+                            onStopService = ::stopBlockerService,
+                            appLimits = appLimits,
+                            usageMillisByPackage = usageMillisByPackage,
+                            onAddApp = { screen = Screen.Picker },
+                            onAdjustLimit = { appLimit, deltaMinutes ->
+                                coroutineScope.launch {
+                                    dao.upsert(
+                                        appLimit.copy(
+                                            dailyLimitMinutes = (appLimit.dailyLimitMinutes + deltaMinutes)
+                                                .coerceAtLeast(5),
+                                        ),
+                                    )
+                                }
+                            },
+                            onToggleEnabled = { appLimit, enabled ->
+                                coroutineScope.launch { dao.upsert(appLimit.copy(enabled = enabled)) }
+                            },
+                            onRemove = { appLimit ->
+                                coroutineScope.launch { dao.delete(appLimit) }
+                            },
+                        )
+
+                        Screen.Picker -> {
+                            val launchableApps = remember {
+                                InstalledAppsRepository.getLaunchableApps(this@MainActivity)
+                            }
+                            AppPickerScreen(
+                                apps = launchableApps,
+                                alreadyConfiguredPackages = appLimits.map { it.packageName }.toSet(),
+                                onPick = { app: LaunchableApp ->
+                                    coroutineScope.launch {
+                                        dao.upsert(
+                                            AppLimit(
+                                                packageName = app.packageName,
+                                                appName = app.label,
+                                                dailyLimitMinutes = DEFAULT_LIMIT_MINUTES,
+                                                enabled = true,
+                                            ),
+                                        )
+                                    }
+                                    screen = Screen.Home
+                                },
+                                onClose = { screen = Screen.Home },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -126,7 +207,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PermissionScreen(
+private fun HomeScreen(
     usageAccessGranted: Boolean,
     notificationsGranted: Boolean,
     overlayGranted: Boolean,
@@ -138,6 +219,12 @@ private fun PermissionScreen(
     onGrantBattery: () -> Unit,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
+    appLimits: List<AppLimit>,
+    usageMillisByPackage: Map<String, Long>,
+    onAddApp: () -> Unit,
+    onAdjustLimit: (AppLimit, Int) -> Unit,
+    onToggleEnabled: (AppLimit, Boolean) -> Unit,
+    onRemove: (AppLimit) -> Unit,
 ) {
     val allGranted = usageAccessGranted && notificationsGranted && overlayGranted && batteryIgnored
 
@@ -148,11 +235,6 @@ private fun PermissionScreen(
             .padding(16.dp),
     ) {
         Text("Pawse", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Phase 0: foreground-app detection only. No limits enforced yet.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
         Spacer(Modifier.height(16.dp))
 
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
@@ -179,38 +261,15 @@ private fun PermissionScreen(
         Button(onClick = onStopService) { Text("Stop service") }
 
         Spacer(Modifier.height(24.dp))
-        UsageDebugCard()
+        AppLimitsScreen(
+            appLimits = appLimits,
+            usageMillisByPackage = usageMillisByPackage,
+            onAddApp = onAddApp,
+            onAdjustLimit = onAdjustLimit,
+            onToggleEnabled = onToggleEnabled,
+            onRemove = onRemove,
+        )
     }
-}
-
-@Composable
-private fun UsageDebugCard() {
-    val context = LocalContext.current
-    val repository = remember {
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        UsageStatsRepository(usageStatsManager)
-    }
-    var usageMillis by remember { mutableStateOf(0L) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            usageMillis = repository.todayUsageMillis(DEBUG_PACKAGE)
-            delay(DEBUG_REFRESH_INTERVAL_MS)
-        }
-    }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Phase 1 debug", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text("Instagram: ${formatDuration(usageMillis)} today", style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
-
-private fun formatDuration(millis: Long): String {
-    val totalSeconds = millis / 1000
-    return "${totalSeconds / 60}m ${totalSeconds % 60}s"
 }
 
 @Composable
