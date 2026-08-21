@@ -16,11 +16,13 @@ import androidx.core.app.NotificationCompat
 import com.pawse.app.MainActivity
 import com.pawse.app.R
 import com.pawse.app.detector.ForegroundDetector
+import com.pawse.app.detector.UsageStatsRepository
+import com.pawse.app.enforcement.Enforcer
 
 /**
  * Foreground service (type specialUse — see manifest) that keeps [ForegroundDetector]
- * polling while the screen is on. Phase 0: detection only, no usage totals, no
- * enforcement.
+ * polling while the screen is on, and — from Phase 2 — runs [Enforcer] against the
+ * currently foreground package on every tick.
  *
  * Only ever started from an already-foreground context (MainActivity) or, from
  * Phase 3 onward, BOOT_COMPLETED — both are exempt from Android 15's restriction on
@@ -37,6 +39,7 @@ class BlockerService : Service() {
     }
 
     private lateinit var foregroundDetector: ForegroundDetector
+    private lateinit var enforcer: Enforcer
     private lateinit var screenStateReceiver: ScreenStateReceiver
     private val handler = Handler(Looper.getMainLooper())
     private var isScreenOn = true
@@ -44,7 +47,8 @@ class BlockerService : Service() {
     private val pollRunnable = object : Runnable {
         override fun run() {
             if (isScreenOn) {
-                foregroundDetector.poll()
+                val foregroundPackage = foregroundDetector.poll()
+                enforcer.maybeEnforce(foregroundPackage)
             }
             handler.postDelayed(this, POLL_INTERVAL_MS)
         }
@@ -54,6 +58,7 @@ class BlockerService : Service() {
         super.onCreate()
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         foregroundDetector = ForegroundDetector(usageStatsManager)
+        enforcer = Enforcer(applicationContext, UsageStatsRepository(usageStatsManager))
 
         screenStateReceiver = ScreenStateReceiver(
             onScreenOn = { isScreenOn = true },
