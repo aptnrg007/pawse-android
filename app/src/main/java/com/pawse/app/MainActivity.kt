@@ -1,6 +1,8 @@
 package com.pawse.app
 
 import android.Manifest
+import android.app.usage.UsageStatsManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -24,14 +26,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.pawse.app.detector.UsageStatsRepository
 import com.pawse.app.permissions.PermissionState
 import com.pawse.app.service.BlockerService
+import kotlinx.coroutines.delay
+
+private const val DEBUG_PACKAGE = "com.instagram.android"
+private const val DEBUG_REFRESH_INTERVAL_MS = 3_000L
 
 class MainActivity : ComponentActivity() {
 
@@ -165,7 +177,40 @@ private fun PermissionScreen(
         Button(onClick = onStartService, enabled = allGranted) { Text("Start service") }
         Spacer(Modifier.height(8.dp))
         Button(onClick = onStopService) { Text("Stop service") }
+
+        Spacer(Modifier.height(24.dp))
+        UsageDebugCard()
     }
+}
+
+@Composable
+private fun UsageDebugCard() {
+    val context = LocalContext.current
+    val repository = remember {
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        UsageStatsRepository(usageStatsManager)
+    }
+    var usageMillis by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            usageMillis = repository.todayUsageMillis(DEBUG_PACKAGE)
+            delay(DEBUG_REFRESH_INTERVAL_MS)
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Phase 1 debug", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text("Instagram: ${formatDuration(usageMillis)} today", style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+private fun formatDuration(millis: Long): String {
+    val totalSeconds = millis / 1000
+    return "${totalSeconds / 60}m ${totalSeconds % 60}s"
 }
 
 @Composable

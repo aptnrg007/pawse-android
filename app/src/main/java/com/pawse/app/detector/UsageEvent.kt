@@ -12,6 +12,16 @@ data class UsageEvent(
 ) {
     enum class Type {
         ACTIVITY_RESUMED,
+
+        // Session terminators. A screen/keyguard/shutdown event ends whatever session
+        // is open regardless of which package (if any) it's reported against; a pause
+        // or stop only ends the session if it names the package that's actually open.
+        ACTIVITY_PAUSED,
+        ACTIVITY_STOPPED,
+        SCREEN_NON_INTERACTIVE,
+        KEYGUARD_SHOWN,
+        DEVICE_SHUTDOWN,
+
         OTHER,
     }
 }
