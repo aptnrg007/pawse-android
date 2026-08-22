@@ -17,8 +17,10 @@ class LimitChecker {
         limitsByPackage = limits.filter { it.enabled }.associateBy { it.packageName }
     }
 
+    fun appLimitFor(packageName: String): AppLimit? = limitsByPackage[packageName]
+
     fun limitMillisFor(packageName: String): Long? =
-        limitsByPackage[packageName]?.dailyLimitMinutes?.times(60_000L)
+        appLimitFor(packageName)?.dailyLimitMinutes?.times(60_000L)
 
     fun isOverLimit(packageName: String, usedMillis: Long): Boolean {
         val limitMillis = limitMillisFor(packageName) ?: return false

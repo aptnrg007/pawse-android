@@ -31,7 +31,7 @@ class Enforcer(
         if (foregroundPackage == null) return
         if (Blocklist.isProtected(context, foregroundPackage)) return
 
-        limitChecker.limitMillisFor(foregroundPackage) ?: return
+        val appLimit = limitChecker.appLimitFor(foregroundPackage) ?: return
         val lastBlocked = lastBlockedAtMillis[foregroundPackage] ?: 0L
         if (now - lastBlocked < COOLDOWN_MILLIS) return
 
@@ -39,12 +39,14 @@ class Enforcer(
         if (!limitChecker.isOverLimit(foregroundPackage, usedMillis)) return
 
         lastBlockedAtMillis[foregroundPackage] = now
-        launchBlockActivity()
+        launchBlockActivity(appLimit.appName, appLimit.dailyLimitMinutes)
     }
 
-    private fun launchBlockActivity() {
+    private fun launchBlockActivity(appName: String, dailyLimitMinutes: Int) {
         val intent = Intent(context, BlockActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            .putExtra(BlockActivity.EXTRA_APP_NAME, appName)
+            .putExtra(BlockActivity.EXTRA_LIMIT_MINUTES, dailyLimitMinutes)
         context.startActivity(intent)
     }
 }
