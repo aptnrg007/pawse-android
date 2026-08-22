@@ -15,4 +15,5 @@ data class AppLimit(
     val appName: String,
     val dailyLimitMinutes: Int,
     val enabled: Boolean,
+    val avatar: String = Avatar.TURTLE.name,
 )

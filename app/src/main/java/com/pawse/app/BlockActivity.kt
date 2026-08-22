@@ -20,7 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.pawse.app.ui.Turtle
+import com.pawse.app.data.Avatar
+import com.pawse.app.ui.AnimalAvatar
 import com.pawse.app.ui.theme.PawseTheme
 
 /**
@@ -35,6 +36,7 @@ class BlockActivity : ComponentActivity() {
     companion object {
         const val EXTRA_APP_NAME = "com.pawse.app.extra.APP_NAME"
         const val EXTRA_LIMIT_MINUTES = "com.pawse.app.extra.LIMIT_MINUTES"
+        const val EXTRA_AVATAR = "com.pawse.app.extra.AVATAR"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +46,13 @@ class BlockActivity : ComponentActivity() {
 
         val appName = intent.getStringExtra(EXTRA_APP_NAME) ?: "This app"
         val limitMinutes = intent.getIntExtra(EXTRA_LIMIT_MINUTES, -1)
+        val avatar = Avatar.fromName(intent.getStringExtra(EXTRA_AVATAR) ?: Avatar.TURTLE.name)
+        val emoji = when (avatar) {
+            Avatar.TURTLE -> "🐢"
+            Avatar.CAT -> "🐱"
+            Avatar.OWL -> "🦉"
+            Avatar.FOX -> "🦊"
+        }
 
         setContent {
             PawseTheme {
@@ -53,13 +62,13 @@ class BlockActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Turtle()
+                        AnimalAvatar(avatar)
                         Spacer(Modifier.height(24.dp))
                         Text(
                             if (limitMinutes >= 0) {
-                                "You've used $appName for $limitMinutes minutes today 🐢"
+                                "You've used $appName for $limitMinutes minutes today $emoji"
                             } else {
-                                "You've reached today's limit 🐢"
+                                "You've reached today's limit $emoji"
                             },
                             color = TextColor,
                             style = MaterialTheme.typography.headlineSmall,

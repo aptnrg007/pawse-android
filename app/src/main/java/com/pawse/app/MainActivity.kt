@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pawse.app.data.AppLimit
+import com.pawse.app.data.Avatar
 import com.pawse.app.data.PawseDatabase
 import com.pawse.app.detector.UsageStatsRepository
 import com.pawse.app.permissions.PermissionState
@@ -152,6 +153,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onRemove = { appLimit ->
                                 coroutineScope.launch { dao.delete(appLimit) }
+                            },
+                            onSelectAvatar = { appLimit, avatar ->
+                                coroutineScope.launch { dao.upsert(appLimit.copy(avatar = avatar.name)) }
                             },
                         )
 
@@ -263,6 +267,7 @@ private fun HomeScreen(
     onAdjustLimit: (AppLimit, Int) -> Unit,
     onToggleEnabled: (AppLimit, Boolean) -> Unit,
     onRemove: (AppLimit) -> Unit,
+    onSelectAvatar: (AppLimit, Avatar) -> Unit,
 ) {
     val allGranted = usageAccessGranted && notificationsGranted && overlayGranted && batteryIgnored
 
@@ -314,6 +319,7 @@ private fun HomeScreen(
             onAdjustLimit = onAdjustLimit,
             onToggleEnabled = onToggleEnabled,
             onRemove = onRemove,
+            onSelectAvatar = onSelectAvatar,
         )
     }
 }
