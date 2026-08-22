@@ -56,7 +56,7 @@ class BlockActivity : ComponentActivity() {
 
         setContent {
             PawseTheme {
-                Surface(color = GroundColor, modifier = Modifier.fillMaxSize()) {
+                Surface(color = ScrimColor, modifier = Modifier.fillMaxSize()) {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -93,5 +93,7 @@ class BlockActivity : ComponentActivity() {
     }
 }
 
-private val GroundColor = Color(0xFF1B3A3E)
+// Translucent (BlockActivity's manifest theme is Theme.Pawse.Translucent) — this tints
+// and dims whatever's behind rather than hiding it, while still catching every touch.
+private val ScrimColor = Color(0xFF1B3A3E).copy(alpha = 0.85f)
 private val TextColor = Color(0xFFF3ECDD)

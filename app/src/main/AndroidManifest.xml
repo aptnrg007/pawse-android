@@ -42,7 +42,7 @@
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:taskAffinity=""
-            android:theme="@style/Theme.Pawse" />
+            android:theme="@style/Theme.Pawse.Translucent" />
 
         <service
             android:name=".service.BlockerService"
