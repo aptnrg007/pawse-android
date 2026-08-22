@@ -10,17 +10,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.pawse.app.picker.AppIconCache
 import com.pawse.app.picker.LaunchableApp
+import com.pawse.app.ui.theme.ButtonDark
+import com.pawse.app.ui.theme.OnButtonDark
+import com.pawse.app.ui.theme.TextSecondary
 
 @Composable
 fun AppPickerScreen(
@@ -36,7 +42,10 @@ fun AppPickerScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Add an app", style = MaterialTheme.typography.headlineSmall)
-            Button(onClick = onClose) { Text("Close") }
+            Button(
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = ButtonDark, contentColor = OnButtonDark),
+            ) { Text("Close") }
         }
 
         LazyColumn {
@@ -49,14 +58,26 @@ fun AppPickerScreen(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Image(icon, contentDescription = null, modifier = Modifier.size(36.dp))
+                    Image(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp).clip(CircleShape),
+                    )
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(app.label, style = MaterialTheme.typography.bodyLarge)
                         if (alreadyConfigured) {
-                            Text("Already added", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "Already added",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                            )
                         }
                     }
-                    Button(onClick = { onPick(app) }, enabled = !alreadyConfigured) {
+                    Button(
+                        onClick = { onPick(app) },
+                        enabled = !alreadyConfigured,
+                        colors = ButtonDefaults.buttonColors(containerColor = ButtonDark, contentColor = OnButtonDark),
+                    ) {
                         Text(if (alreadyConfigured) "Added" else "Add")
                     }
                 }
