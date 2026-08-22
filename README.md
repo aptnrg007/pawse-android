@@ -11,8 +11,10 @@ Built in phases per the dev plan, technical risk first:
 - **Phase 0 — Detector**: foreground-app polling via `UsageStatsManager`. Done, device-verified.
 - **Phase 1 — Usage calculator**: recomputes today's per-app usage from midnight on every check, no accumulated state. Done, device-verified against the real event log and Digital Wellbeing.
 - **Phase 2 — Enforcement**: hard blocklist, cooldown, full-screen block on limit breach. Done, device-verified.
-- **Phase 3 — Configuration**: Room-backed per-app limits, app picker, limit editor, boot receiver. Built and functionally verified; not yet verified against its full exit criteria (independent multi-app blocking, config surviving a reboot).
-- **Phase 4 — The turtle**: not started.
+- **Phase 3 — Configuration**: Room-backed per-app limits, app picker, limit editor, boot receiver. Done, device-verified — independent multi-app blocking and config surviving a reboot both confirmed.
+- **Phase 4 — The turtle**: an animated Compose Canvas turtle on the block screen, naming the blocked app and its limit. Done, device-verified.
+
+All five phases are complete.
 
 The core design rule: Android's usage events are the only source of truth. The app never keeps a running total — every check recomputes from `queryEvents(midnight, now)`, so service kills, reboots, crashes, and midnight rollover all cost nothing.
 
@@ -35,6 +37,18 @@ Sideloaded apps hit Android 15's Restricted Settings — after installing, open 
 - Notifications — for the foreground-service notification
 - Display over other apps (`SYSTEM_ALERT_WINDOW`) — exempts the block screen from Android's background-activity-launch restrictions
 - Ignore battery optimisation — keeps the monitoring service alive
+
+## Known limitations
+
+A session that ends right at/near a reboot can lose its last few minutes from Android's
+on-disk usage log — enforcement still fires correctly in the moment (it reads from
+Android's live event buffer), but that last session may read back as unused afterward
+because Android hadn't flushed it to disk yet. This is a platform characteristic of
+`UsageStatsManager`, not something Pawse can fix.
+
+Bypass resistance is intentionally out of scope: home button, force-stop, uninstall, and
+permission revocation all defeat this app. It's a speed bump, not a lock — see the plan
+doc for why that's a deliberate boundary, not an oversight.
 
 ## Building
 
