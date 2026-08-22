@@ -34,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +57,7 @@ import com.pawse.app.picker.AppIconCache
 import com.pawse.app.picker.InstalledAppsRepository
 import com.pawse.app.picker.LaunchableApp
 import com.pawse.app.service.BlockerService
+import com.pawse.app.service.MonitoringPreference
 import com.pawse.app.ui.AppLimitsScreen
 import com.pawse.app.ui.AppPickerScreen
 import com.pawse.app.ui.Turtle
@@ -84,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private val notificationsGranted = mutableStateOf(false)
     private val overlayGranted = mutableStateOf(false)
     private val batteryIgnored = mutableStateOf(false)
+    private val monitoringEnabled = mutableStateOf(true)
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -129,8 +132,8 @@ class MainActivity : ComponentActivity() {
                             onGrantNotifications = ::requestNotificationPermission,
                             onGrantOverlay = ::openOverlaySettings,
                             onGrantBattery = ::openBatterySettings,
-                            onStartService = ::startBlockerService,
-                            onStopService = ::stopBlockerService,
+                            monitoringEnabled = monitoringEnabled.value,
+                            onToggleMonitoring = ::setMonitoringEnabled,
                             appLimits = appLimits,
                             usageMillisByPackage = usageMillisByPackage,
                             onAddApp = { screen = Screen.Picker },
@@ -184,6 +187,15 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPermissionState()
+
+        monitoringEnabled.value = MonitoringPreference.isEnabled(this)
+        if (monitoringEnabled.value && PermissionState.allGranted(this)) {
+            // Idempotent: if BlockerService is already running, this just re-delivers
+            // onStartCommand, which resets its poll loop rather than recreating it.
+            // Covers the service having been killed by the OS or a reinstall without
+            // the user needing to notice and tap Start again.
+            startBlockerService()
+        }
     }
 
     private fun refreshPermissionState() {
@@ -217,12 +229,18 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun startBlockerService() {
-        ContextCompat.startForegroundService(this, Intent(this, BlockerService::class.java))
+    private fun setMonitoringEnabled(enabled: Boolean) {
+        MonitoringPreference.setEnabled(this, enabled)
+        monitoringEnabled.value = enabled
+        if (enabled) {
+            startBlockerService()
+        } else {
+            startService(Intent(this, BlockerService::class.java).setAction(BlockerService.ACTION_STOP))
+        }
     }
 
-    private fun stopBlockerService() {
-        startService(Intent(this, BlockerService::class.java).setAction(BlockerService.ACTION_STOP))
+    private fun startBlockerService() {
+        ContextCompat.startForegroundService(this, Intent(this, BlockerService::class.java))
     }
 }
 
@@ -237,8 +255,8 @@ private fun HomeScreen(
     onGrantNotifications: () -> Unit,
     onGrantOverlay: () -> Unit,
     onGrantBattery: () -> Unit,
-    onStartService: () -> Unit,
-    onStopService: () -> Unit,
+    monitoringEnabled: Boolean,
+    onToggleMonitoring: (Boolean) -> Unit,
     appLimits: List<AppLimit>,
     usageMillisByPackage: Map<String, Long>,
     onAddApp: () -> Unit,
@@ -279,7 +297,11 @@ private fun HomeScreen(
         }
         Spacer(Modifier.height(16.dp))
 
-        MonitoringCard(allGranted = allGranted, onStartService = onStartService, onStopService = onStopService)
+        MonitoringCard(
+            allGranted = allGranted,
+            monitoringEnabled = monitoringEnabled,
+            onToggleMonitoring = onToggleMonitoring,
+        )
         Spacer(Modifier.height(24.dp))
 
         AppMonitoringRow(appLimits = appLimits, onAddApp = onAddApp)
@@ -364,24 +386,35 @@ private fun PermissionsCard(
 }
 
 @Composable
-private fun MonitoringCard(allGranted: Boolean, onStartService: () -> Unit, onStopService: () -> Unit) {
+private fun MonitoringCard(
+    allGranted: Boolean,
+    monitoringEnabled: Boolean,
+    onToggleMonitoring: (Boolean) -> Unit,
+) {
+    val isActive = allGranted && monitoringEnabled
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Monitoring", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = onStartService,
-                    enabled = allGranted,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = ButtonDark, contentColor = OnButtonDark),
-                ) { Text("Start") }
-                Button(
-                    onClick = onStopService,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = OnButtonDark, contentColor = ButtonDark),
-                ) { Text("Stop") }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text("Monitoring", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    when {
+                        isActive -> "Active"
+                        !allGranted -> "Off — grant permissions first"
+                        else -> "Off"
+                    },
+                    color = if (isActive) Success else TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
+            Switch(
+                checked = monitoringEnabled,
+                onCheckedChange = onToggleMonitoring,
+                enabled = allGranted,
+            )
         }
     }
 }
