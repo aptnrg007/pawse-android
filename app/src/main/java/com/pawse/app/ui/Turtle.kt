@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,30 +67,40 @@ fun Turtle(
             val w = this.size.width
             val h = this.size.height
 
-            // Flippers first so the shell overlaps their base.
+            // Side profile, facing right. Legs and tail first so the shell dome
+            // overlaps their tops, leaving just their lower halves peeking out.
             listOf(
-                Offset(w * 0.02f, h * 0.52f) to Size(w * 0.22f, h * 0.26f),
-                Offset(w * 0.76f, h * 0.52f) to Size(w * 0.22f, h * 0.26f),
-                Offset(w * 0.10f, h * 0.76f) to Size(w * 0.20f, h * 0.20f),
-                Offset(w * 0.70f, h * 0.76f) to Size(w * 0.20f, h * 0.20f),
-            ).forEach { (topLeft, flipperSize) -> drawOval(skinColor, topLeft = topLeft, size = flipperSize) }
+                Offset(w * 0.53f, h * 0.60f) to Size(w * 0.14f, h * 0.18f), // front leg
+                Offset(w * 0.24f, h * 0.60f) to Size(w * 0.14f, h * 0.18f), // back leg
+            ).forEach { (topLeft, legSize) -> drawOval(skinColor, topLeft = topLeft, size = legSize) }
+            drawCircle(skinColor, radius = w * 0.035f, center = Offset(w * 0.14f, h * 0.58f)) // tail
 
-            drawOval(shellColor, topLeft = Offset(w * 0.15f, h * 0.28f), size = Size(w * 0.70f, h * 0.55f))
-            val plateRadius = w * 0.055f
+            val shellLeft = w * 0.16f
+            val shellRight = w * 0.72f
+            val shellTop = h * 0.28f
+            val shellBottom = h * 0.62f
+            val shellMidX = (shellLeft + shellRight) / 2f
+            val shellPath = Path().apply {
+                moveTo(shellLeft, shellBottom)
+                quadraticTo(shellLeft, shellTop, shellMidX, shellTop)
+                quadraticTo(shellRight, shellTop, shellRight, shellBottom)
+                close()
+            }
+            drawPath(shellPath, color = shellColor)
+            val plateRadius = w * 0.048f
             listOf(
-                Offset(w * 0.50f, h * 0.42f),
-                Offset(w * 0.35f, h * 0.55f),
-                Offset(w * 0.65f, h * 0.55f),
-                Offset(w * 0.50f, h * 0.66f),
+                Offset(w * 0.32f, h * 0.40f),
+                Offset(w * 0.44f, h * 0.34f),
+                Offset(w * 0.56f, h * 0.40f),
             ).forEach { center -> drawCircle(plateColor, radius = plateRadius, center = center) }
 
-            val headCenter = Offset(w * 0.5f, h * 0.18f)
-            drawCircle(skinColor, radius = w * 0.13f, center = headCenter)
-            val eyeHeight = h * 0.035f * eyeOpenness
+            val headCenter = Offset(w * 0.82f, h * 0.50f)
+            drawCircle(skinColor, radius = w * 0.11f, center = headCenter)
+            val eyeHeight = h * 0.03f * eyeOpenness
             drawOval(
                 eyeColor,
-                topLeft = Offset(headCenter.x - w * 0.02f, headCenter.y - eyeHeight / 2f),
-                size = Size(w * 0.04f, eyeHeight),
+                topLeft = Offset(headCenter.x + w * 0.03f, headCenter.y - h * 0.045f - eyeHeight / 2f),
+                size = Size(w * 0.032f, eyeHeight),
             )
         }
     }
