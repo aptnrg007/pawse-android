@@ -8,7 +8,7 @@ Android-only, Kotlin + Jetpack Compose, sideload-first (no Play Store constraint
 
 ## Download
 
-[**Download the APK (v0.1)**](https://github.com/aptnrg007/pawse-android/releases/download/v0.1/pawse-v0.1-debug.apk) — open this link on your phone, then open the downloaded file to install. Android will ask to allow installs from whatever app you downloaded it with (browser, Files) — that's expected for a sideloaded app. Needs Android 10+ (minSdk 29). See [Permissions](#permissions) below for the one-time setup after installing.
+[**Download the APK (v0.3)**](https://github.com/aptnrg007/pawse-android/releases/download/v0.3/pawse-v0.3-debug.apk) — open this link on your phone, then open the downloaded file to install. Android will ask to allow installs from whatever app you downloaded it with (browser, Files) — that's expected for a sideloaded app. Needs Android 10+ (minSdk 29). See [Permissions](#permissions) below for the one-time setup after installing.
 
 ## Status
 
